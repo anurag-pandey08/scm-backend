@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.*
+.yarn/cache/
+.yarn/install-state.gz
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Caches
+.cache/
+.npm/
+.eslintcache
+coverage/
+*.lcov
+tmp/
+temp/
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Husky's generated hook shims (husky writes these on `prepare`)
+.husky/_/
+
+# Local-only agent config (shared settings.json stays tracked)
+.claude/settings.local.json
+
+# Prisma Client is generated from prisma/schema.prisma — run `prisma generate`
+/src/generated/
+
+# Vendored agent skills — restore with the installer using skills-lock.json.
+# .claude/skills and .windsurf/skills are junctions into .agents/skills, so
+# committing all three would store the same files three times.
+/.agents/skills/
+/.claude/skills/
+/.windsurf/skills/
