@@ -31,3 +31,63 @@ model Post {
   author    User    @relation(fields: [authorId], references: [id])
   authorId  Int
 }
+
+/// One of the transport firms the office keeps books for.
+///
+/// The row *is* the letterhead — what the settings screen edits is written
+/// straight back here, so a correction made on one machine prints on every
+/// other. The letterhead as transcribed off the firm's own book lives in
+/// src/data/company-seeds.ts; the seed writes it in, and "restore" puts it
+/// back, which is the only reason the code still holds a copy.
+///
+/// `slug` is the public key — it is the first segment of every frontend URL
+/// and the handle every other book files under. `id` stays internal.
+model Company {
+  id   Int    @id @default(autoincrement())
+  slug String @unique
+
+  // --- Letterhead, as printed across the top of the page -------------------
+  name     String
+  /// The roundel on the L.R. masthead and the tile in the sidebar.
+  monogram String
+  /// Under the name in the app chrome.
+  tagline  String
+  /// Under the name on the printed L.R. — the two books word it differently.
+  lrTagline   String
+  /// …and on the printed bill.
+  billTagline String
+
+  address String
+  /// Booking office, short enough for the sidebar footer.
+  officeLine String
+
+  /// The two books were printed with different addresses. Both are in use.
+  emailLr   String
+  emailBill String
+
+  phones String[]
+
+  pan          String
+  jurisdiction String
+
+  bankName      String
+  bankBranch    String
+  bankAccountNo String
+  bankIfsc      String
+
+  /// The station every L.R. is booked "From".
+  origin         String
+  bookingOffices String[]
+
+  // --- Not editable from the settings screen -------------------------------
+  /// The tile colour that tells the two books apart at a glance. A safeguard,
+  /// not a preference: a bilty printed on the wrong letterhead is a real
+  /// mistake, so the firm cannot recolour its own tile.
+  accentClass String
+  /// False while the letterhead details are still placeholders. Settled in the
+  /// code against the book, never by typing in a box.
+  detailsConfirmed Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
