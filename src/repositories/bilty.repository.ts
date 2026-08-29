@@ -1,7 +1,8 @@
 import { prisma } from "../lib/prisma.ts";
 import type { BiltyModel } from "../generated/prisma/models.ts";
-import type { Prisma } from "../generated/prisma/client.ts";
+import { Prisma } from "../generated/prisma/client.ts";
 import type { BiltyColumns, RegisterFilter } from "../types/bilty.types.ts";
+import type { MonthTotal, RouteTotal } from "../types/dashboard.types.ts";
 
 /**
  * The only place that talks to `prisma.bilty`.
@@ -49,6 +50,41 @@ function where(companyId: number, query: RegisterFilter): Prisma.BiltyWhereInput
     ...(query.status === "all" ? {} : { status: query.status }),
     ...(query.payment === "all" ? {} : { paymentType: query.payment }),
   };
+}
+
+/** The window the dashboard's figures are taken over, and how many it wants. */
+export interface SummaryWindow {
+  /** Inclusive at both ends. */
+  start: Date;
+  end: Date;
+  /** First day of the earliest month the freight trend covers. */
+  monthsStart: Date;
+  /** Destinations the lanes chart plots. */
+  routeLimit: number;
+  /** Rows "latest bookings" shows. */
+  recentLimit: number;
+}
+
+/**
+ * The charge column, added across — the Gr. Total of the printed L.R.
+ *
+ * Written once and interpolated into both raw queries, because the lanes are
+ * ordered by it and the trend is bucketed on it, and two copies of an addition
+ * is one copy too many.
+ */
+const GROSS = Prisma.sql`("freight" + "aoc" + "hamali" + "stCharges" + "otherCharges")`;
+
+/**
+ * A day, as Postgres should read it.
+ *
+ * `lrDate` is a DATE. Compared against a JS Date it would be compared against
+ * a timestamp, which Postgres resolves using the server's own timezone — not
+ * the office's, and not necessarily either of the two. The raw queries hand it
+ * a date literal instead, so the window has the same edges wherever the server
+ * happens to be running.
+ */
+function day(date: Date): string {
+  return date.toISOString().slice(0, 10);
 }
 
 export const biltyRepository = {
@@ -163,5 +199,136 @@ export const biltyRepository = {
     });
 
     return rows.map((row) => row.lrNo);
+  },
+
+  /**
+   * Everything the dashboard reports, taken against one snapshot.
+   *
+   * Six queries in one transaction, for the same reason the register's four
+   * are: the tiles, the trend, the split and the lanes are read as one page,
+   * and a bilty booked at the next desk halfway through would otherwise land
+   * in the count and not in the total.
+   *
+   * What comes back is Prisma's own shapes — Decimals, enum identifiers and
+   * grouped counts. The return type is left inferred rather than restated,
+   * because the service is where those become rupees and printed words.
+   */
+  async summary(companyId: number, window: SummaryWindow) {
+    const inWindow: Prisma.BiltyWhereInput = {
+      companyId,
+      lrDate: { gte: window.start, lte: window.end },
+    };
+
+    const live: Prisma.BiltyWhereInput = {
+      ...inWindow,
+      status: { not: "CANCELLED" },
+    };
+
+    // Declared before the transaction rather than inside the array, so each
+    // one keeps the shape Prisma infers for it. A query built inline in the
+    // array comes back widened to "some grouping of a bilty", and the service
+    // would be reading `_sum` off a maybe.
+    //
+    // Nothing runs yet: a Prisma promise does not go to the database until it
+    // is awaited, which is the whole reason $transaction can take a list.
+
+    // Cancelled L.R.s are counted here with the rest. The tiles report how
+    // many were struck out, and the number range only reads unbroken if the
+    // struck-out ones are inside it.
+    const statuses = prisma.bilty.groupBy({
+      by: ["status"],
+      where: inWindow,
+      _count: { _all: true },
+      // Prisma asks a groupBy to say how it is ordered. Neither of these two
+      // is read in order — the service looks its rows up by status and by
+      // term — so the ordering is only here to be an answer.
+      orderBy: { status: "asc" },
+    });
+
+    const lrSpan = prisma.bilty.aggregate({
+      where: inWindow,
+      _min: { lrNo: true },
+      _max: { lrNo: true },
+    });
+
+    // One query, two figures: the split the pie draws, and the receivable
+    // tile — which is the To Pay and TBB slices with their advances taken
+    // off. Cancelled consignments are out of both; they were never money.
+    const payment = prisma.bilty.groupBy({
+      by: ["paymentType"],
+      where: live,
+      _count: { _all: true },
+      orderBy: { paymentType: "asc" },
+      _sum: {
+        freight: true,
+        aoc: true,
+        hamali: true,
+        stCharges: true,
+        otherCharges: true,
+        advance: true,
+      },
+    });
+
+    // Ordered by the gross, which is five columns added together — so the
+    // ordering and the limit are Postgres's, not this file's. Sorting in here
+    // would mean fetching every destination in the book to keep six.
+    const routes = prisma.$queryRaw<RouteTotal[]>`
+      SELECT "to" AS destination,
+             COUNT(*)::int AS trips,
+             COALESCE(SUM(${GROSS}), 0)::float8 AS freight
+      FROM "Bilty"
+      WHERE "companyId" = ${companyId}
+        AND "lrDate" BETWEEN ${day(window.start)}::date
+                         AND ${day(window.end)}::date
+        AND "status" <> 'CANCELLED'
+      GROUP BY "to"
+      ORDER BY freight DESC, destination ASC
+      LIMIT ${window.routeLimit}
+    `;
+
+    // Bucketed by month in Postgres. Prisma cannot group by the month of a
+    // date column, and pulling a year of consignments back to bucket them here
+    // would be fetching a book to add up its footer. Only months something was
+    // booked in come back; the service fills in the quiet ones.
+    const monthly = prisma.$queryRaw<MonthTotal[]>`
+      SELECT to_char("lrDate", 'YYYY-MM') AS month,
+             COALESCE(SUM(${GROSS}), 0)::float8 AS freight
+      FROM "Bilty"
+      WHERE "companyId" = ${companyId}
+        AND "lrDate" BETWEEN ${day(window.monthsStart)}::date
+                         AND ${day(window.end)}::date
+        AND "status" <> 'CANCELLED'
+      GROUP BY month
+      ORDER BY month
+    `;
+
+    // The latest entries in the book, not the latest inside the window: the
+    // card is the top of the register, and a firm that has booked nothing this
+    // month should still see what it booked last month rather than an empty
+    // table.
+    const recent = prisma.bilty.findMany({
+      where: { companyId },
+      orderBy: NEWEST_FIRST,
+      take: window.recentLimit,
+    });
+
+    const [statusRows, lrRow, paymentRows, routeRows, monthRows, recentRows] =
+      await prisma.$transaction([
+        statuses,
+        lrSpan,
+        payment,
+        routes,
+        monthly,
+        recent,
+      ]);
+
+    return {
+      statuses: statusRows,
+      lrSpan: lrRow,
+      payment: paymentRows,
+      routes: routeRows,
+      monthly: monthRows,
+      recent: recentRows,
+    };
   },
 };

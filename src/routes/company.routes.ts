@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { biltyRouter } from "./bilty.routes.ts";
+import { dashboardRouter } from "./dashboard.routes.ts";
 import { companyController } from "../controllers/company.controller.ts";
 import { validateBody } from "../middlewares/validate.middleware.ts";
 import { letterheadSchema } from "../schemas/company.schema.ts";
@@ -28,3 +29,6 @@ companyRouter.post("/:slug/restore", companyController.restore);
 // A firm's books hang off the firm, because that is how they are kept: there
 // is no register that is not one company's.
 companyRouter.use("/:slug/bilties", biltyRouter);
+
+// …and so does what is read off them.
+companyRouter.use("/:slug/dashboard", dashboardRouter);
