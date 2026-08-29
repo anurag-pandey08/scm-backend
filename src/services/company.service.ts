@@ -23,7 +23,18 @@ export const companyService = {
     return rows.map(toDto);
   },
 
-  async getBySlug(slug: string): Promise<CompanyDto> {
+  /**
+   * The firm's row, for the other books to hang off.
+   *
+   * Every register is one firm's, and each of them starts by turning the slug
+   * in the URL into the `companyId` its rows are filed under. That resolution
+   * belongs here rather than repeated in each service, along with the two ways
+   * it can fail — a slug naming no firm, and a firm with no row yet.
+   *
+   * Returns the row rather than the DTO because the callers want what the DTO
+   * leaves out: the id, and the book's L.R. floor.
+   */
+  async getRow(slug: string): Promise<CompanyModel> {
     // Checked before the query so an unknown slug reads as "no such firm"
     // rather than as an empty result that might mean an unseeded database.
     if (!isCompanySlug(slug)) {
@@ -43,7 +54,11 @@ export const companyService = {
       );
     }
 
-    return toDto(row);
+    return row;
+  },
+
+  async getBySlug(slug: string): Promise<CompanyDto> {
+    return toDto(await companyService.getRow(slug));
   },
 
   /** Writes the letterhead the office typed over the printed one. */
@@ -74,7 +89,10 @@ export const companyService = {
 /** Flattens a letterhead back into columns. */
 function toColumns(
   input: Letterhead,
-): Omit<CompanySeed, "slug" | "accentClass" | "detailsConfirmed"> {
+): Omit<
+    CompanySeed,
+    "slug" | "accentClass" | "detailsConfirmed" | "lrFloor"
+  > {
   return {
     name: input.name,
     monogram: input.monogram,

@@ -23,7 +23,10 @@ export const companyRepository = {
   /** Writes the editable columns. `slug` and the safeguards are not among them. */
   update(
     slug: string,
-    data: Omit<CompanySeed, "slug" | "accentClass" | "detailsConfirmed">,
+    data: Omit<
+    CompanySeed,
+    "slug" | "accentClass" | "detailsConfirmed" | "lrFloor"
+  >,
   ): Promise<CompanyModel> {
     return prisma.company.update({ where: { slug }, data });
   },

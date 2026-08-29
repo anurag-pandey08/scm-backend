@@ -88,6 +88,126 @@ model Company {
   /// code against the book, never by typing in a box.
   detailsConfirmed Boolean @default(false)
 
+  /// L.R. numbers in this firm's book run above this. The next number off the
+  /// book is the highest one used plus one, or this plus one when the book is
+  /// empty — so a fresh database still starts numbering where the paper did.
+  lrFloor Int @default(1000)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  bilties Bilty[]
+}
+
+/// Freight terms. `TBB` is "to be billed" — neither paid at booking nor
+/// collected on delivery, but put on the party's monthly bill.
+///
+/// These three enums hold identifiers, not the words printed on the L.R.
+/// ("To Pay", "Owner's Risk"). The printed wording lives in one pair of maps
+/// in src/services/bilty.service.ts, which every value already passes through
+/// on its way out — so mapping the labels here as well would be a second place
+/// to keep the same list, and Postgres enum labels are no place for an
+/// apostrophe.
+enum PaymentType {
+  PAID
+  TO_PAY
+  TBB
+}
+
+enum BiltyStatus {
+  BOOKED
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+/// Who carries the loss if the goods are damaged. The printed L.R. says
+/// owner's risk unless the clerk marks it otherwise.
+enum RiskType {
+  OWNERS_RISK
+  CARRIERS_RISK
+}
+
+/// A Bilty — the lorry receipt, the consignment note, the L.R.
+///
+/// Columns follow the printed book so the paper form and the screen stay
+/// one-to-one. Two groups are flattened rather than given tables of their own:
+///
+///   the parties — the clerk types a consignor and consignee onto each L.R.
+///   rather than picking them off a list, so a party has no life outside the
+///   consignment it was written on. A party master is a later decision, and
+///   flat columns are what it would be built from.
+///
+///   the charges — one rupee column each, exactly as the charge block on the
+///   L.R. prints them. Summing them is the reader's job, not the schema's.
+model Bilty {
+  id        String  @id @default(cuid())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  /// L.R. No. — the number printed on the book. Unique within a firm's book
+  /// and nowhere else: both firms number from their own floor, so the two
+  /// books can and do hold the same number.
+  lrNo String
+  /// The day the consignment was booked. Date only — an L.R. has no clock on it.
+  lrDate DateTime @db.Date
+
+  lorryNo       String
+  from          String
+  to            String
+  deliveryAt    String
+  bookingOffice String
+
+  // --- Consignor and consignee, as written on the L.R. ----------------------
+  consignorName    String
+  consignorAddress String
+  consignorGstNo   String
+  consigneeName    String
+  consigneeAddress String
+  consigneeGstNo   String
+
+  // --- The goods ------------------------------------------------------------
+  packages Int
+  /// "Said to contain" — declared by the consignor, not verified.
+  contents String
+  /// Kilograms.
+  actualWeight  Decimal @db.Decimal(12, 3)
+  chargedWeight Decimal @db.Decimal(12, 3)
+  declaredValue Decimal @db.Decimal(14, 2)
+  /// Freight rate per quintal.
+  rate Decimal @db.Decimal(12, 2)
+
+  // --- The charge column, in rupees ----------------------------------------
+  freight Decimal @db.Decimal(12, 2)
+  /// A.O.C. — any other charges.
+  aoc Decimal @db.Decimal(12, 2)
+  /// Loading / unloading labour.
+  hamali Decimal @db.Decimal(12, 2)
+  /// St. Charges — statistical / station charges.
+  stCharges     Decimal @db.Decimal(12, 2)
+  otherCharges  Decimal @db.Decimal(12, 2)
+  /// Collected at booking, deducted from the gross total.
+  advance Decimal @db.Decimal(12, 2)
+
+  paymentType PaymentType
+  status      BiltyStatus
+  risk        RiskType
+
+  invoiceNo  String
+  eWayBillNo String
+
+  // --- Insurance, where the party declared any ------------------------------
+  insuranceCompany  String
+  insurancePolicyNo String
+  insuranceDate     DateTime? @db.Date
+  insuranceAmount   Decimal   @db.Decimal(14, 2)
+
+  remarks String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, lrNo])
+  /// The register is read newest first and always within one firm's book.
+  @@index([companyId, lrDate(sort: Desc)])
 }
