@@ -1,0 +1,8 @@
+# husky runs this with `sh -e` and node_modules/.bin on PATH,
+# so a failing command aborts the commit.
+
+# Lint + auto-fix only the staged files.
+lint-staged
+
+# Typecheck the whole project — a staged change can break an unstaged file.
+tsc --noEmit
