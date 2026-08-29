@@ -7,8 +7,10 @@
  * There is no generator to re-run: from here on the books are edited through
  * the API, and this file is only the state a fresh database starts from.
  *
- * Dates are anchored to 2026-08-04, which is what the dashboard's "last thirty
- * days" counts back from.
+ * The dates below run up to `SEED_ANCHOR`, and the seed moves the whole book
+ * as a block so that its last entry lands on the day it is run — see
+ * prisma/seed.ts. The dates are therefore a shape, not a set of days: thirty
+ * days of booking, spaced as the books were.
  */
 
 import type { CompanySlug } from "./company-seeds.ts";
@@ -17,6 +19,9 @@ import type { BiltyInput } from "../schemas/bilty.schema.ts";
 export interface BiltySeed extends BiltyInput {
   company: CompanySlug;
 }
+
+/** The last day written in the book below, and the day the rest count back from. */
+export const SEED_ANCHOR = "2026-08-04";
 
 // prettier-ignore
 export const BILTY_SEEDS: BiltySeed[] = [
