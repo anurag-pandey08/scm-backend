@@ -34,12 +34,16 @@ import { AppError } from "../utils/app-error.ts";
 
 // --- Enums ------------------------------------------------------------------
 //
-// Postgres holds the printed words (see the @map in the schema) but Prisma's
-// client speaks in identifiers, so the two have to be introduced. Written as
+// Postgres holds identifiers (TO_PAY) and the L.R. prints words ("To Pay"), so
+// the two have to be introduced. This is the one place that knows both — the
+// schema deliberately does not carry the printed wording, because a Postgres
+// enum label is no place for the apostrophe in "Owner's Risk". Written as
 // literal pairs rather than derived, so adding a status to one enum without
 // the other is a compile error rather than a runtime one.
 
-const PAYMENT_OUT: Record<DbPaymentType, PaymentType> = {
+// Exported: the dashboard labels its payment split in the same words the L.R.
+// prints, and this is the list that says what those words are.
+export const PAYMENT_OUT: Record<DbPaymentType, PaymentType> = {
   PAID: "Paid",
   TO_PAY: "To Pay",
   TBB: "TBB",
@@ -102,8 +106,14 @@ function toDate(value: string): Date | null {
 
 // --- Shape ------------------------------------------------------------------
 
-/** A row, as the printed L.R. lays it out. */
-function toDto(row: BiltyModel): Bilty {
+/**
+ * A row, as the printed L.R. lays it out.
+ *
+ * Exported for the dashboard, whose "latest bookings" card renders the same
+ * rows the register does and so needs the same shape mapping. The mapping
+ * itself stays here, with the other two.
+ */
+export function toDto(row: BiltyModel): Bilty {
   return {
     id: row.id,
     lrNo: row.lrNo,
