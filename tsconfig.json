@@ -9,8 +9,7 @@
     "outDir": "dist",
     "sourceMap": true,
     "strict": true,
-    "skipLibCheck": true,
-    "paths": { "helmet": ["./node_modules/helmet/index.d.mts"] }
+    "skipLibCheck": true
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]
