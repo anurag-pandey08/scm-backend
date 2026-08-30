@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "prisma generate && node -e \"const p=require.resolve('helmet/package.json');console.log('HELMET', require(p).version, require('fs').readdirSync(require('path').dirname(p)).join(' '))\" && tsc",
+    "build": "prisma generate && node -e \"const fs=require('fs'),d='node_modules/helmet';console.log('HELMET',JSON.parse(fs.readFileSync(d+'/package.json','utf8')).version,fs.readdirSync(d).join(' '))\" && tsc",
     "start": "node dist/server.js",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
