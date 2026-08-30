@@ -1,8 +1,13 @@
 import compression from "compression";
 import cookieParser from "cookie-parser";
 import cors from "cors";
-import express, { type Express, type Request, type Response } from "express";
-import helmet from "helmet";
+import express, {
+  type Express,
+  type Request,
+  type RequestHandler,
+  type Response,
+} from "express";
+import helmetDefault, { type HelmetOptions } from "helmet";
 import morgan from "morgan";
 import { env } from "./config/env.ts";
 import {
@@ -10,6 +15,16 @@ import {
   notFoundHandler,
 } from "./middlewares/error.middleware.ts";
 import { apiRouter } from "./routes/index.ts";
+
+/**
+ * Vercel builds src/app.ts against helmet's CommonJS declarations, where the
+ * default import types as the module object rather than the middleware
+ * factory, so the call below fails to compile there but not locally. The
+ * runtime value is the factory under either resolution.
+ */
+const helmet = helmetDefault as unknown as (
+  options?: Readonly<HelmetOptions>,
+) => RequestHandler;
 
 /**
  * Builds the Express app without starting a listener, so tests can drive it
