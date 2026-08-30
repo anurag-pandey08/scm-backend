@@ -1,9 +1,7 @@
-import { createApp } from "./app.ts";
+import app from "./app.ts";
 import { env } from "./config/env.ts";
 import { logger } from "./lib/logger.ts";
 import { prisma } from "./lib/prisma.ts";
-
-const app = createApp();
 
 const server = app.listen(env.PORT, () => {
   logger.info(`Listening on http://localhost:${env.PORT} [${env.NODE_ENV}]`);
