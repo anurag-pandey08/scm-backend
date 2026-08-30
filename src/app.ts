@@ -52,3 +52,10 @@ export function createApp(): Express {
 
   return app;
 }
+
+/**
+ * Vercel's Express preset binds to this file and invokes its default export,
+ * which has to be the app itself rather than the factory. src/server.ts uses
+ * the same instance so a local run and a deployment serve identical wiring.
+ */
+export default createApp();
