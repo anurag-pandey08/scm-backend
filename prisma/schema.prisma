@@ -47,17 +47,17 @@ model Company {
   slug String @unique
 
   // --- Letterhead, as printed across the top of the page -------------------
-  name     String
+  name        String
   /// The roundel on the L.R. masthead and the tile in the sidebar.
-  monogram String
+  monogram    String
   /// Under the name in the app chrome.
-  tagline  String
+  tagline     String
   /// Under the name on the printed L.R. — the two books word it differently.
   lrTagline   String
   /// …and on the printed bill.
   billTagline String
 
-  address String
+  address    String
   /// Booking office, short enough for the sidebar footer.
   officeLine String
 
@@ -83,7 +83,7 @@ model Company {
   /// The tile colour that tells the two books apart at a glance. A safeguard,
   /// not a preference: a bilty printed on the wrong letterhead is a real
   /// mistake, so the firm cannot recolour its own tile.
-  accentClass String
+  accentClass      String
   /// False while the letterhead details are still placeholders. Settled in the
   /// code against the book, never by typing in a box.
   detailsConfirmed Boolean @default(false)
@@ -93,10 +93,15 @@ model Company {
   /// empty — so a fresh database still starts numbering where the paper did.
   lrFloor Int @default(1000)
 
+  /// The same, for the bill book. Kept apart from `lrFloor` because the two
+  /// books are numbered independently — a firm on L.R. 3037 is on bill 597.
+  billFloor Int @default(500)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  bilties Bilty[]
+  bilties  Bilty[]
+  invoices Invoice[]
 }
 
 /// Freight terms. `TBB` is "to be billed" — neither paid at booking nor
@@ -148,7 +153,7 @@ model Bilty {
   /// L.R. No. — the number printed on the book. Unique within a firm's book
   /// and nowhere else: both firms number from their own floor, so the two
   /// books can and do hold the same number.
-  lrNo String
+  lrNo   String
   /// The day the consignment was booked. Date only — an L.R. has no clock on it.
   lrDate DateTime @db.Date
 
@@ -167,27 +172,27 @@ model Bilty {
   consigneeGstNo   String
 
   // --- The goods ------------------------------------------------------------
-  packages Int
+  packages      Int
   /// "Said to contain" — declared by the consignor, not verified.
-  contents String
+  contents      String
   /// Kilograms.
   actualWeight  Decimal @db.Decimal(12, 3)
   chargedWeight Decimal @db.Decimal(12, 3)
   declaredValue Decimal @db.Decimal(14, 2)
   /// Freight rate per quintal.
-  rate Decimal @db.Decimal(12, 2)
+  rate          Decimal @db.Decimal(12, 2)
 
   // --- The charge column, in rupees ----------------------------------------
-  freight Decimal @db.Decimal(12, 2)
+  freight      Decimal @db.Decimal(12, 2)
   /// A.O.C. — any other charges.
-  aoc Decimal @db.Decimal(12, 2)
+  aoc          Decimal @db.Decimal(12, 2)
   /// Loading / unloading labour.
-  hamali Decimal @db.Decimal(12, 2)
+  hamali       Decimal @db.Decimal(12, 2)
   /// St. Charges — statistical / station charges.
-  stCharges     Decimal @db.Decimal(12, 2)
-  otherCharges  Decimal @db.Decimal(12, 2)
+  stCharges    Decimal @db.Decimal(12, 2)
+  otherCharges Decimal @db.Decimal(12, 2)
   /// Collected at booking, deducted from the gross total.
-  advance Decimal @db.Decimal(12, 2)
+  advance      Decimal @db.Decimal(12, 2)
 
   paymentType PaymentType
   status      BiltyStatus
@@ -210,4 +215,110 @@ model Bilty {
   @@unique([companyId, lrNo])
   /// The register is read newest first and always within one firm's book.
   @@index([companyId, lrDate(sort: Desc)])
+}
+
+/// Where a bill stands. `RAISED` is the only state that is money owed: a draft
+/// has not been sent, a paid bill has been settled, and a cancelled one was
+/// withdrawn.
+enum InvoiceStatus {
+  DRAFT
+  RAISED
+  PAID
+  CANCELLED
+}
+
+/// What a line of the charge column is.
+///
+/// A `FREIGHT` line bills one challan at a rate per tonne, and carries the
+/// challan number, its date and the lorry that ran it. A `CHARGE` line is a
+/// lump sum with no challan behind it — detention, halting, extra labour — and
+/// is written straight into the amount column, exactly as on the paper bill.
+enum LineKind {
+  FREIGHT
+  CHARGE
+}
+
+/// An Invoice — the freight bill the office raises on a party.
+///
+/// One bill carries one party, one route and a column of challans, which is
+/// how the printed bill book is laid out. The party is flattened into columns
+/// for the same reason the L.R.'s consignor is: the clerk writes a party onto
+/// each bill rather than picking one off a list, so a party has no life outside
+/// the bill it was written on.
+///
+/// The charge lines are *not* flattened. Unlike the L.R.'s charge block — a
+/// fixed set of named boxes — a bill's lines are a list of unknown length, and
+/// a list is a table.
+model Invoice {
+  id        String  @id @default(cuid())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  /// Bill No. — the number printed on the book. Unique within a firm's book
+  /// and nowhere else: both firms number from their own floor.
+  billNo   String
+  /// Date only — a bill has no clock on it.
+  billDate DateTime @db.Date
+
+  // --- M/s — the party the bill is raised on -------------------------------
+  partyName    String
+  partyAddress String
+  partyGstNo   String
+
+  /// Free text rather than the station list the L.R. uses: bills run to places
+  /// the booking office never books from, like Khurdha (Odisha).
+  from String
+  to   String
+
+  /// The party's own invoice number for the goods, printed under the lines.
+  partyInvoiceNo String
+
+  status InvoiceStatus
+  /// The day the party settled. Null until they have.
+  paidOn DateTime?     @db.Date
+
+  remarks String
+
+  lines InvoiceLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, billNo])
+  /// The bill book is read newest first and always within one firm's book.
+  @@index([companyId, billDate(sort: Desc)])
+}
+
+/// One row of the printed charge column.
+///
+/// `position` is the row's place on the paper, not its id. The order is the
+/// clerk's — freight lines first, then whatever was added on — and a bill that
+/// reprints its lines in a different order is a different document.
+model InvoiceLine {
+  id        String  @id @default(cuid())
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  position Int
+
+  kind LineKind
+
+  /// Challan No. — the L.R. this line bills. Blank on a charge line.
+  challanNo   String
+  /// The challan's date. Null on a charge line.
+  date        DateTime? @db.Date
+  /// Perticulars — the lorry number on a freight line, the charge's name
+  /// otherwise. Spelled as the printed book spells it.
+  particulars String
+
+  /// Rupees per tonne. Zero on a charge line.
+  rate   Decimal @db.Decimal(12, 2)
+  /// Tonnes — the bill weighs in tonnes where the L.R. weighs in kilograms.
+  weight Decimal @db.Decimal(12, 3)
+  /// The Rs. column. On a freight line this is rate × weight rounded off, but
+  /// it is stored rather than computed: bills get rounded by hand, and what
+  /// was printed is what the party owes.
+  amount Decimal @db.Decimal(14, 2)
+
+  @@index([invoiceId, position])
 }

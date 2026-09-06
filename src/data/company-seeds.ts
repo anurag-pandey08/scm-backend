@@ -58,6 +58,8 @@ export const COMPANY_SEEDS: Record<CompanySlug, CompanySeed> = {
     detailsConfirmed: true,
     // The book in use runs from 3010; the floor is where its numbering starts.
     lrFloor: 3000,
+    // …and the bill book runs from 531, so its numbering starts below that.
+    billFloor: 500,
   },
 
   // Letterhead taken off this firm's own L.R. book: the same Odhav premises as
@@ -94,6 +96,8 @@ export const COMPANY_SEEDS: Record<CompanySlug, CompanySeed> = {
     detailsConfirmed: true,
     // A separate book, numbering in its own range — the two never collide.
     lrFloor: 7400,
+    // A separate bill book too, numbering in its own range.
+    billFloor: 200,
   },
 };
 
