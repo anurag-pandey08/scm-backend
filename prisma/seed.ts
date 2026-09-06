@@ -5,9 +5,11 @@ import {
   LOADING_SLIP_SEEDS,
   type LoadingSlipSeed,
 } from "../src/data/loading-slip-seeds.ts";
+import { TRIP_SEEDS, type TripSeed } from "../src/data/trip-seeds.ts";
 import { biltyService } from "../src/services/bilty.service.ts";
 import { invoiceService } from "../src/services/invoice.service.ts";
 import { loadingSlipService } from "../src/services/loading-slip.service.ts";
+import { tripService } from "../src/services/trip.service.ts";
 import { companyRepository } from "../src/repositories/company.repository.ts";
 import { prisma } from "../src/lib/prisma.ts";
 import { logger } from "../src/lib/logger.ts";
@@ -19,8 +21,9 @@ import {
 } from "../src/utils/office-day.ts";
 
 /**
- * Writes the firms' printed letterheads and their three books — the L.R.
- * register, the bill book and the slip book — into the database.
+ * Writes the firms' printed letterheads, their three books — the L.R.
+ * register, the bill book and the slip book — and the one daybook they share
+ * into the database.
  *
  * Companies are upserted, so running it twice is not an error — but note that
  * it therefore *overwrites* a letterhead the office has edited, putting every
@@ -120,6 +123,32 @@ function slipsEnding(
 }
 
 /**
+ * The daybook, moved by the same shift as the rest.
+ *
+ * Five dates to a row — the trip's own, and the four the money is settled on —
+ * and every one of them moves together, so a balance still lands eight days
+ * after the advance it was drawn against.
+ *
+ * Anchored to one firm's register rather than to the clock, for the same
+ * reason the bill book is: it cites L.R. numbers, and the three books on the
+ * sidebar should read as one office's month. Which firm's register is
+ * arbitrary — the daybook belongs to neither and cites both — so the caller
+ * picks one and the choice is noted there.
+ */
+function tripsEnding(book: TripSeed[], shift: number): TripSeed[] {
+  if (shift === 0) return book;
+
+  return book.map((seed) => ({
+    ...seed,
+    date: moved(seed.date, shift),
+    receiveDate: moved(seed.receiveDate, shift),
+    paidDate: moved(seed.paidDate, shift),
+    advanceDate: moved(seed.advanceDate, shift),
+    balanceDate: moved(seed.balanceDate, shift),
+  }));
+}
+
+/**
  * The day a firm's register actually ends on.
  *
  * Today for a book seeded in this run, and whenever it was seeded for one that
@@ -215,6 +244,27 @@ async function main(): Promise<void> {
     }
 
     logger.info(`Seeded ${book.length} slips into ${slug}`);
+  }
+
+  // One daybook, so one pass and no loop over firms. Anchored to Sewak Cargo
+  // Movers' register because the rows have to sit on *a* timeline and that is
+  // the older of the two books; the daybook itself belongs to neither.
+  const daybook = tripsEnding(
+    TRIP_SEEDS,
+    shiftTo(await registerEndsOn("sewak-cargo-movers")),
+  );
+  const existingTrips = await prisma.trip.count();
+
+  if (existingTrips > 0) {
+    logger.info(
+      `Skipped the daybook — it already holds ${existingTrips} trips`,
+    );
+  } else {
+    for (const trip of daybook) {
+      await tripService.create(trip);
+    }
+
+    logger.info(`Seeded ${daybook.length} trips into the daybook`);
   }
 }
 

@@ -399,3 +399,81 @@ model LoadingSlip {
   /// The slip book is read newest first and always within one firm's book.
   @@index([companyId, slipDate(sort: Desc)])
 }
+
+/// A Trip — one row of the office daybook, one lorry sent out.
+///
+/// Columns and their order follow the printed ledger, read left to right
+/// across the spread: what went where, what the lorry is owed, and what the
+/// party has paid back against it.
+///
+/// **This register is deliberately not kept per firm.** Every other book here
+/// hangs off `Company` and never crosses; this one daybook is worked by both
+/// firms and both see the same rows, so there is no `companyId` — and that
+/// absence is the design, not an omission. See the note at the top of
+/// scm-frontend/src/lib/trip-register-types.ts, which the two ends agree on.
+///
+/// There is no number column either, and so no unique constraint: the ledger
+/// numbers nothing. A row is identified by the day and the lorry, and the same
+/// lorry runs again next week.
+model Trip {
+  id String @id @default(cuid())
+
+  /// Date only — the daybook has no clock on it.
+  date DateTime @db.Date
+
+  truckNo    String
+  partyName  String
+  /// Blank on a trip the office placed itself, without a broker in the middle.
+  brokerName String
+  from       String
+  to         String
+  goods      String
+
+  /// Rupees per tonne.
+  rate   Decimal @db.Decimal(12, 2)
+  /// Tonnes.
+  weight Decimal @db.Decimal(12, 3)
+
+  // --- Owed to the lorry ----------------------------------------------------
+  /// Handed to the driver at the loading point.
+  advance Decimal @db.Decimal(12, 2)
+  /// Left to pay the lorry once it has run. Stored rather than derived from
+  /// the hire: a trip can be settled at a figure nobody quoted, and the ledger
+  /// records what was settled.
+  balance Decimal @db.Decimal(12, 2)
+  /// Freight to be collected at the delivery end rather than booked here.
+  toPay   Decimal @db.Decimal(12, 2)
+
+  /// The day the driver took the advance, and the day the balance was settled.
+  /// Null until each happens — `paidDate` being null is what "still to pay the
+  /// lorry" is read off.
+  receiveDate DateTime? @db.Date
+  paidDate    DateTime? @db.Date
+
+  /// L.R. No. — the bilty raised for the trip, where one was. A loose
+  /// reference and not a relation: the daybook is shared and the two L.R.
+  /// books are not, so the same number means different consignments in each.
+  lrNo String
+
+  /// What the office keeps on the trip.
+  commission Decimal @db.Decimal(12, 2)
+
+  remarks String
+
+  // --- Party payment --------------------------------------------------------
+  /// What the party is to pay the office for the trip.
+  partyPayment     Decimal   @db.Decimal(14, 2)
+  /// Come in from the party against the advance, and the day it came.
+  advanceReceiveRs Decimal   @db.Decimal(12, 2)
+  advanceDate      DateTime? @db.Date
+  /// …and the same against the balance.
+  balanceReceiveRs Decimal   @db.Decimal(12, 2)
+  balanceDate      DateTime? @db.Date
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The daybook is read newest first. `createdAt` breaks a day's ties, so a
+  /// page boundary falls in the same place every time it is asked for.
+  @@index([date(sort: Desc), createdAt(sort: Desc)])
+}
