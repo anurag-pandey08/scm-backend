@@ -25,7 +25,7 @@ export const companyRepository = {
     slug: string,
     data: Omit<
     CompanySeed,
-    "slug" | "accentClass" | "detailsConfirmed" | "lrFloor"
+    "slug" | "accentClass" | "detailsConfirmed" | "lrFloor" | "billFloor"
   >,
   ): Promise<CompanyModel> {
     return prisma.company.update({ where: { slug }, data });
