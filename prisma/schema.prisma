@@ -47,17 +47,17 @@ model Company {
   slug String @unique
 
   // --- Letterhead, as printed across the top of the page -------------------
-  name     String
+  name        String
   /// The roundel on the L.R. masthead and the tile in the sidebar.
-  monogram String
+  monogram    String
   /// Under the name in the app chrome.
-  tagline  String
+  tagline     String
   /// Under the name on the printed L.R. — the two books word it differently.
   lrTagline   String
   /// …and on the printed bill.
   billTagline String
 
-  address String
+  address    String
   /// Booking office, short enough for the sidebar footer.
   officeLine String
 
@@ -83,7 +83,7 @@ model Company {
   /// The tile colour that tells the two books apart at a glance. A safeguard,
   /// not a preference: a bilty printed on the wrong letterhead is a real
   /// mistake, so the firm cannot recolour its own tile.
-  accentClass String
+  accentClass      String
   /// False while the letterhead details are still placeholders. Settled in the
   /// code against the book, never by typing in a box.
   detailsConfirmed Boolean @default(false)
@@ -93,10 +93,19 @@ model Company {
   /// empty — so a fresh database still starts numbering where the paper did.
   lrFloor Int @default(1000)
 
+  /// The same, for the bill book. Kept apart from `lrFloor` because the two
+  /// books are numbered independently — a firm on L.R. 3037 is on bill 597.
+  billFloor Int @default(500)
+
+  /// …and for the slip book, which is numbered independently of both.
+  slipFloor Int @default(1000)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  bilties Bilty[]
+  bilties      Bilty[]
+  invoices     Invoice[]
+  loadingSlips LoadingSlip[]
 }
 
 /// Freight terms. `TBB` is "to be billed" — neither paid at booking nor
@@ -148,7 +157,7 @@ model Bilty {
   /// L.R. No. — the number printed on the book. Unique within a firm's book
   /// and nowhere else: both firms number from their own floor, so the two
   /// books can and do hold the same number.
-  lrNo String
+  lrNo   String
   /// The day the consignment was booked. Date only — an L.R. has no clock on it.
   lrDate DateTime @db.Date
 
@@ -167,27 +176,27 @@ model Bilty {
   consigneeGstNo   String
 
   // --- The goods ------------------------------------------------------------
-  packages Int
+  packages      Int
   /// "Said to contain" — declared by the consignor, not verified.
-  contents String
+  contents      String
   /// Kilograms.
   actualWeight  Decimal @db.Decimal(12, 3)
   chargedWeight Decimal @db.Decimal(12, 3)
   declaredValue Decimal @db.Decimal(14, 2)
   /// Freight rate per quintal.
-  rate Decimal @db.Decimal(12, 2)
+  rate          Decimal @db.Decimal(12, 2)
 
   // --- The charge column, in rupees ----------------------------------------
-  freight Decimal @db.Decimal(12, 2)
+  freight      Decimal @db.Decimal(12, 2)
   /// A.O.C. — any other charges.
-  aoc Decimal @db.Decimal(12, 2)
+  aoc          Decimal @db.Decimal(12, 2)
   /// Loading / unloading labour.
-  hamali Decimal @db.Decimal(12, 2)
+  hamali       Decimal @db.Decimal(12, 2)
   /// St. Charges — statistical / station charges.
-  stCharges     Decimal @db.Decimal(12, 2)
-  otherCharges  Decimal @db.Decimal(12, 2)
+  stCharges    Decimal @db.Decimal(12, 2)
+  otherCharges Decimal @db.Decimal(12, 2)
   /// Collected at booking, deducted from the gross total.
-  advance Decimal @db.Decimal(12, 2)
+  advance      Decimal @db.Decimal(12, 2)
 
   paymentType PaymentType
   status      BiltyStatus
@@ -210,4 +219,261 @@ model Bilty {
   @@unique([companyId, lrNo])
   /// The register is read newest first and always within one firm's book.
   @@index([companyId, lrDate(sort: Desc)])
+}
+
+/// Where a bill stands. `RAISED` is the only state that is money owed: a draft
+/// has not been sent, a paid bill has been settled, and a cancelled one was
+/// withdrawn.
+enum InvoiceStatus {
+  DRAFT
+  RAISED
+  PAID
+  CANCELLED
+}
+
+/// What a line of the charge column is.
+///
+/// A `FREIGHT` line bills one challan at a rate per tonne, and carries the
+/// challan number, its date and the lorry that ran it. A `CHARGE` line is a
+/// lump sum with no challan behind it — detention, halting, extra labour — and
+/// is written straight into the amount column, exactly as on the paper bill.
+enum LineKind {
+  FREIGHT
+  CHARGE
+}
+
+/// An Invoice — the freight bill the office raises on a party.
+///
+/// One bill carries one party, one route and a column of challans, which is
+/// how the printed bill book is laid out. The party is flattened into columns
+/// for the same reason the L.R.'s consignor is: the clerk writes a party onto
+/// each bill rather than picking one off a list, so a party has no life outside
+/// the bill it was written on.
+///
+/// The charge lines are *not* flattened. Unlike the L.R.'s charge block — a
+/// fixed set of named boxes — a bill's lines are a list of unknown length, and
+/// a list is a table.
+model Invoice {
+  id        String  @id @default(cuid())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  /// Bill No. — the number printed on the book. Unique within a firm's book
+  /// and nowhere else: both firms number from their own floor.
+  billNo   String
+  /// Date only — a bill has no clock on it.
+  billDate DateTime @db.Date
+
+  // --- M/s — the party the bill is raised on -------------------------------
+  partyName    String
+  partyAddress String
+  partyGstNo   String
+
+  /// Free text rather than the station list the L.R. uses: bills run to places
+  /// the booking office never books from, like Khurdha (Odisha).
+  from String
+  to   String
+
+  /// The party's own invoice number for the goods, printed under the lines.
+  partyInvoiceNo String
+
+  status InvoiceStatus
+  /// The day the party settled. Null until they have.
+  paidOn DateTime?     @db.Date
+
+  remarks String
+
+  lines InvoiceLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, billNo])
+  /// The bill book is read newest first and always within one firm's book.
+  @@index([companyId, billDate(sort: Desc)])
+}
+
+/// One row of the printed charge column.
+///
+/// `position` is the row's place on the paper, not its id. The order is the
+/// clerk's — freight lines first, then whatever was added on — and a bill that
+/// reprints its lines in a different order is a different document.
+model InvoiceLine {
+  id        String  @id @default(cuid())
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  position Int
+
+  kind LineKind
+
+  /// Challan No. — the L.R. this line bills. Blank on a charge line.
+  challanNo   String
+  /// The challan's date. Null on a charge line.
+  date        DateTime? @db.Date
+  /// Perticulars — the lorry number on a freight line, the charge's name
+  /// otherwise. Spelled as the printed book spells it.
+  particulars String
+
+  /// Rupees per tonne. Zero on a charge line.
+  rate   Decimal @db.Decimal(12, 2)
+  /// Tonnes — the bill weighs in tonnes where the L.R. weighs in kilograms.
+  weight Decimal @db.Decimal(12, 3)
+  /// The Rs. column. On a freight line this is rate × weight rounded off, but
+  /// it is stored rather than computed: bills get rounded by hand, and what
+  /// was printed is what the party owes.
+  amount Decimal @db.Decimal(14, 2)
+
+  @@index([invoiceId, position])
+}
+
+/// Where a loading slip stands. `LOADED` is the end of it — the lorry took the
+/// goods and the slip has done its job.
+enum LoadingSlipStatus {
+  DRAFT
+  ISSUED
+  LOADED
+  CANCELLED
+}
+
+/// A Loading Slip — the letter sent ahead of a lorry placed against someone
+/// else's order.
+///
+/// It is not an L.R. and not a bill. Nothing is booked and nobody is charged;
+/// it only tells the loading point which lorry is coming, what was agreed for
+/// it, and how much of that the driver has already been handed. So there is no
+/// relation to `Bilty` here and there deliberately never will be one by
+/// default: a slip goes out before there is a bilty to point at, and often for
+/// a lorry that is never booked at all.
+///
+/// `party` is a name and nothing else. The paper slip carries one line for it,
+/// and it is as often another transport firm as a party the office keeps an
+/// address for — so unlike the L.R.'s consignor there is nothing here to
+/// flatten into a block.
+model LoadingSlip {
+  id        String  @id @default(cuid())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  /// No. — the number printed on the slip book. Unique within a firm's book
+  /// and nowhere else: both firms number from their own floor.
+  slipNo   String
+  /// Date only — a slip has no clock on it.
+  slipDate DateTime @db.Date
+
+  /// To M/s. — whoever ordered the lorry.
+  party String
+
+  vehicleNo String
+  from      String
+  to        String
+
+  /// Rupees per tonne, where the trip was quoted by weight rather than lump
+  /// sum. Zero on a lump-sum hire, exactly as the paper leaves it.
+  rate   Decimal @db.Decimal(12, 2)
+  /// Tonnes.
+  weight Decimal @db.Decimal(12, 3)
+
+  /// Lorry hire agreed for the trip — the figure the slip is really about.
+  totalFreight Decimal @db.Decimal(14, 2)
+  /// Handed to the driver at the loading point.
+  advance      Decimal @db.Decimal(12, 2)
+  /// Detention allowed at the loading point. Owed on top of the hire, so it
+  /// raises the balance rather than lowering it.
+  detention    Decimal @db.Decimal(12, 2)
+
+  // --- Length — the bed the order asked for, printed L X W X H -------------
+  /// Feet.
+  bedLength Decimal @db.Decimal(8, 2)
+  bedWidth  Decimal @db.Decimal(8, 2)
+  bedHeight Decimal @db.Decimal(8, 2)
+
+  status LoadingSlipStatus
+
+  remarks String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, slipNo])
+  /// The slip book is read newest first and always within one firm's book.
+  @@index([companyId, slipDate(sort: Desc)])
+}
+
+/// A Trip — one row of the office daybook, one lorry sent out.
+///
+/// Columns and their order follow the printed ledger, read left to right
+/// across the spread: what went where, what the lorry is owed, and what the
+/// party has paid back against it.
+///
+/// **This register is deliberately not kept per firm.** Every other book here
+/// hangs off `Company` and never crosses; this one daybook is worked by both
+/// firms and both see the same rows, so there is no `companyId` — and that
+/// absence is the design, not an omission. See the note at the top of
+/// scm-frontend/src/lib/trip-register-types.ts, which the two ends agree on.
+///
+/// There is no number column either, and so no unique constraint: the ledger
+/// numbers nothing. A row is identified by the day and the lorry, and the same
+/// lorry runs again next week.
+model Trip {
+  id String @id @default(cuid())
+
+  /// Date only — the daybook has no clock on it.
+  date DateTime @db.Date
+
+  truckNo    String
+  partyName  String
+  /// Blank on a trip the office placed itself, without a broker in the middle.
+  brokerName String
+  from       String
+  to         String
+  goods      String
+
+  /// Rupees per tonne.
+  rate   Decimal @db.Decimal(12, 2)
+  /// Tonnes.
+  weight Decimal @db.Decimal(12, 3)
+
+  // --- Owed to the lorry ----------------------------------------------------
+  /// Handed to the driver at the loading point.
+  advance Decimal @db.Decimal(12, 2)
+  /// Left to pay the lorry once it has run. Stored rather than derived from
+  /// the hire: a trip can be settled at a figure nobody quoted, and the ledger
+  /// records what was settled.
+  balance Decimal @db.Decimal(12, 2)
+  /// Freight to be collected at the delivery end rather than booked here.
+  toPay   Decimal @db.Decimal(12, 2)
+
+  /// The day the driver took the advance, and the day the balance was settled.
+  /// Null until each happens — `paidDate` being null is what "still to pay the
+  /// lorry" is read off.
+  receiveDate DateTime? @db.Date
+  paidDate    DateTime? @db.Date
+
+  /// L.R. No. — the bilty raised for the trip, where one was. A loose
+  /// reference and not a relation: the daybook is shared and the two L.R.
+  /// books are not, so the same number means different consignments in each.
+  lrNo String
+
+  /// What the office keeps on the trip.
+  commission Decimal @db.Decimal(12, 2)
+
+  remarks String
+
+  // --- Party payment --------------------------------------------------------
+  /// What the party is to pay the office for the trip.
+  partyPayment     Decimal   @db.Decimal(14, 2)
+  /// Come in from the party against the advance, and the day it came.
+  advanceReceiveRs Decimal   @db.Decimal(12, 2)
+  advanceDate      DateTime? @db.Date
+  /// …and the same against the balance.
+  balanceReceiveRs Decimal   @db.Decimal(12, 2)
+  balanceDate      DateTime? @db.Date
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The daybook is read newest first. `createdAt` breaks a day's ties, so a
+  /// page boundary falls in the same place every time it is asked for.
+  @@index([date(sort: Desc), createdAt(sort: Desc)])
 }
