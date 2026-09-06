@@ -97,11 +97,15 @@ model Company {
   /// books are numbered independently — a firm on L.R. 3037 is on bill 597.
   billFloor Int @default(500)
 
+  /// …and for the slip book, which is numbered independently of both.
+  slipFloor Int @default(1000)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  bilties  Bilty[]
-  invoices Invoice[]
+  bilties      Bilty[]
+  invoices     Invoice[]
+  loadingSlips LoadingSlip[]
 }
 
 /// Freight terms. `TBB` is "to be billed" — neither paid at booking nor
@@ -321,4 +325,77 @@ model InvoiceLine {
   amount Decimal @db.Decimal(14, 2)
 
   @@index([invoiceId, position])
+}
+
+/// Where a loading slip stands. `LOADED` is the end of it — the lorry took the
+/// goods and the slip has done its job.
+enum LoadingSlipStatus {
+  DRAFT
+  ISSUED
+  LOADED
+  CANCELLED
+}
+
+/// A Loading Slip — the letter sent ahead of a lorry placed against someone
+/// else's order.
+///
+/// It is not an L.R. and not a bill. Nothing is booked and nobody is charged;
+/// it only tells the loading point which lorry is coming, what was agreed for
+/// it, and how much of that the driver has already been handed. So there is no
+/// relation to `Bilty` here and there deliberately never will be one by
+/// default: a slip goes out before there is a bilty to point at, and often for
+/// a lorry that is never booked at all.
+///
+/// `party` is a name and nothing else. The paper slip carries one line for it,
+/// and it is as often another transport firm as a party the office keeps an
+/// address for — so unlike the L.R.'s consignor there is nothing here to
+/// flatten into a block.
+model LoadingSlip {
+  id        String  @id @default(cuid())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  /// No. — the number printed on the slip book. Unique within a firm's book
+  /// and nowhere else: both firms number from their own floor.
+  slipNo   String
+  /// Date only — a slip has no clock on it.
+  slipDate DateTime @db.Date
+
+  /// To M/s. — whoever ordered the lorry.
+  party String
+
+  vehicleNo String
+  from      String
+  to        String
+
+  /// Rupees per tonne, where the trip was quoted by weight rather than lump
+  /// sum. Zero on a lump-sum hire, exactly as the paper leaves it.
+  rate   Decimal @db.Decimal(12, 2)
+  /// Tonnes.
+  weight Decimal @db.Decimal(12, 3)
+
+  /// Lorry hire agreed for the trip — the figure the slip is really about.
+  totalFreight Decimal @db.Decimal(14, 2)
+  /// Handed to the driver at the loading point.
+  advance      Decimal @db.Decimal(12, 2)
+  /// Detention allowed at the loading point. Owed on top of the hire, so it
+  /// raises the balance rather than lowering it.
+  detention    Decimal @db.Decimal(12, 2)
+
+  // --- Length — the bed the order asked for, printed L X W X H -------------
+  /// Feet.
+  bedLength Decimal @db.Decimal(8, 2)
+  bedWidth  Decimal @db.Decimal(8, 2)
+  bedHeight Decimal @db.Decimal(8, 2)
+
+  status LoadingSlipStatus
+
+  remarks String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, slipNo])
+  /// The slip book is read newest first and always within one firm's book.
+  @@index([companyId, slipDate(sort: Desc)])
 }

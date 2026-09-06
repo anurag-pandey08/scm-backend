@@ -1,8 +1,13 @@
 import { BILTY_SEEDS, SEED_ANCHOR, type BiltySeed } from "../src/data/bilty-seeds.ts";
 import { COMPANY_SEED_LIST } from "../src/data/company-seeds.ts";
 import { INVOICE_SEEDS, type InvoiceSeed } from "../src/data/invoice-seeds.ts";
+import {
+  LOADING_SLIP_SEEDS,
+  type LoadingSlipSeed,
+} from "../src/data/loading-slip-seeds.ts";
 import { biltyService } from "../src/services/bilty.service.ts";
 import { invoiceService } from "../src/services/invoice.service.ts";
+import { loadingSlipService } from "../src/services/loading-slip.service.ts";
 import { companyRepository } from "../src/repositories/company.repository.ts";
 import { prisma } from "../src/lib/prisma.ts";
 import { logger } from "../src/lib/logger.ts";
@@ -14,8 +19,8 @@ import {
 } from "../src/utils/office-day.ts";
 
 /**
- * Writes the firms' printed letterheads, their L.R. books and their bill books
- * into the database.
+ * Writes the firms' printed letterheads and their three books — the L.R.
+ * register, the bill book and the slip book — into the database.
  *
  * Companies are upserted, so running it twice is not an error — but note that
  * it therefore *overwrites* a letterhead the office has edited, putting every
@@ -23,10 +28,9 @@ import {
  * for all firms at once, and it is why this is a command someone runs rather
  * than something the server does at startup.
  *
- * The bilties and the bills are only written into an empty book. A seed that
- * overwrote a register would be a data-loss button dressed up as a setup step,
- * and unlike a letterhead there is nothing printed to restore a consignment
- * from.
+ * The three books are only written into when empty. A seed that overwrote a
+ * register would be a data-loss button dressed up as a setup step, and unlike
+ * a letterhead there is nothing printed to restore a consignment from.
  */
 
 /**
@@ -92,6 +96,26 @@ function invoicesEnding(book: InvoiceSeed[], shift: number): InvoiceSeed[] {
       ...line,
       date: moved(line.date, shift),
     })),
+  }));
+}
+
+/**
+ * The slip book, moved by the same shift as the rest.
+ *
+ * One date to a slip, and no relation to anything in the register — a slip
+ * goes out before there is a bilty to point at. It is anchored to the register
+ * anyway, so that the three books on the sidebar read as one office's month
+ * rather than three timelines that happen to share a database.
+ */
+function slipsEnding(
+  book: LoadingSlipSeed[],
+  shift: number,
+): LoadingSlipSeed[] {
+  if (shift === 0) return book;
+
+  return book.map((seed) => ({
+    ...seed,
+    slipDate: moved(seed.slipDate, shift),
   }));
 }
 
@@ -170,6 +194,27 @@ async function main(): Promise<void> {
     }
 
     logger.info(`Seeded ${book.length} bills into ${slug}`);
+  }
+
+  for (const slug of new Set(LOADING_SLIP_SEEDS.map((seed) => seed.company))) {
+    const book = slipsEnding(
+      LOADING_SLIP_SEEDS.filter((seed) => seed.company === slug),
+      shiftTo(await registerEndsOn(slug)),
+    );
+    const existing = await prisma.loadingSlip.count({
+      where: { company: { slug } },
+    });
+
+    if (existing > 0) {
+      logger.info(`Skipped ${slug} — its book already holds ${existing} slips`);
+      continue;
+    }
+
+    for (const { company, ...slip } of book) {
+      await loadingSlipService.create(company, slip);
+    }
+
+    logger.info(`Seeded ${book.length} slips into ${slug}`);
   }
 }
 

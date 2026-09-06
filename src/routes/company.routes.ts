@@ -2,6 +2,7 @@ import { Router } from "express";
 import { biltyRouter } from "./bilty.routes.ts";
 import { dashboardRouter } from "./dashboard.routes.ts";
 import { invoiceRouter } from "./invoice.routes.ts";
+import { loadingSlipRouter } from "./loading-slip.routes.ts";
 import { companyController } from "../controllers/company.controller.ts";
 import { validateBody } from "../middlewares/validate.middleware.ts";
 import { letterheadSchema } from "../schemas/company.schema.ts";
@@ -31,6 +32,7 @@ companyRouter.post("/:slug/restore", companyController.restore);
 // is no register that is not one company's.
 companyRouter.use("/:slug/bilties", biltyRouter);
 companyRouter.use("/:slug/invoices", invoiceRouter);
+companyRouter.use("/:slug/loading-slips", loadingSlipRouter);
 
 // …and so does what is read off them.
 companyRouter.use("/:slug/dashboard", dashboardRouter);

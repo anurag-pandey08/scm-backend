@@ -91,7 +91,7 @@ function toColumns(
   input: Letterhead,
 ): Omit<
     CompanySeed,
-    "slug" | "accentClass" | "detailsConfirmed" | "lrFloor" | "billFloor"
+    "slug" | "accentClass" | "detailsConfirmed" | "lrFloor" | "billFloor" | "slipFloor"
   > {
   return {
     name: input.name,
