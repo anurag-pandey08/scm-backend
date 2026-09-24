@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { invoiceController } from "../controllers/invoice.controller.ts";
 import { validateBody } from "../middlewares/validate.middleware.ts";
+import { bulkDeleteSchema } from "../schemas/bulk-delete.schema.ts";
 import { invoiceSchema } from "../schemas/invoice.schema.ts";
 
 /**
@@ -20,6 +21,16 @@ invoiceRouter.get("/", invoiceController.list);
 invoiceRouter.get("/next-bill", invoiceController.nextBillNo);
 
 invoiceRouter.post("/", validateBody(invoiceSchema), invoiceController.create);
+
+// The ticked rows, in one request. A POST because the list is a body and a
+// DELETE that carries one is not reliably carried — see the controller. Its
+// own path rather than a DELETE on "/", so there is no route that empties the
+// book by being called with nothing.
+invoiceRouter.post(
+  "/bulk-delete",
+  validateBody(bulkDeleteSchema),
+  invoiceController.removeMany,
+);
 
 invoiceRouter.get("/:id", invoiceController.getById);
 invoiceRouter.patch(

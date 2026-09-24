@@ -155,4 +155,27 @@ export const tripService = {
 
     if (!deleted) throw AppError.notFound("No such trip in the register");
   },
+
+  /**
+   * Strikes off every trip the clerk ticked, and says how many went.
+   *
+   * The count can be short of the list, and rather more easily here than in
+   * the other three books: both firms work this one daybook, so the desk that
+   * struck a row off in the meantime need not even be in the same office.
+   * Refusing the whole batch over it would throw away nine good strike-offs to
+   * report one that was already done, so the ones that are there go and the
+   * caller is told the figure.
+   *
+   * None of them being there is different: that is a request that did nothing,
+   * and it reads as a 404 the same way asking for one missing trip does.
+   */
+  async removeMany(ids: string[]): Promise<number> {
+    const deleted = await tripRepository.deleteMany(ids);
+
+    if (deleted === 0) {
+      throw AppError.notFound("None of those trips are in the register");
+    }
+
+    return deleted;
+  },
 };

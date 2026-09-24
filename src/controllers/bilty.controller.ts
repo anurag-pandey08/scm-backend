@@ -4,6 +4,7 @@ import {
   registerQuerySchema,
   type BiltyInput,
 } from "../schemas/bilty.schema.ts";
+import type { BulkDeleteInput } from "../schemas/bulk-delete.schema.ts";
 import { AppError } from "../utils/app-error.ts";
 import { pathParam } from "../utils/path-param.ts";
 import { z } from "zod";
@@ -85,5 +86,27 @@ export const biltyController = {
     res
       .status(200)
       .json({ success: true, data: { id: pathParam(req, "id") } });
+  },
+
+  /**
+   * POST /bulk-delete — every bilty the clerk ticked in the register.
+   *
+   * A POST rather than a DELETE with a body. The body is the request here, and
+   * a DELETE that carries one is allowed but not reliably carried: proxies and
+   * CDNs are within their rights to drop it, and a delete that silently
+   * arrives with no list is not a failure mode worth having.
+   *
+   * Both figures go back, because they can differ — see the service. The
+   * register says how many rows it actually removed rather than repeating the
+   * number the clerk ticked.
+   */
+  async removeMany(req: Request, res: Response): Promise<void> {
+    const { ids } = req.body as BulkDeleteInput;
+
+    const deleted = await biltyService.removeMany(pathParam(req, "slug"), ids);
+
+    res
+      .status(200)
+      .json({ success: true, data: { deleted, requested: ids.length } });
   },
 };

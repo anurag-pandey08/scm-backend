@@ -194,4 +194,23 @@ export const tripRepository = {
     const { count } = await prisma.trip.deleteMany({ where: { id } });
     return count > 0;
   },
+
+  /**
+   * Strikes off several trips in one statement.
+   *
+   * No company to scope by — this is the one book both firms work — so the ids
+   * are the whole of the guard, and every row that goes here goes for both
+   * offices.
+   *
+   * What comes back is how many rows Postgres actually removed, which can be
+   * short of what was asked for — a trip the next desk struck off while the
+   * clerk was ticking boxes is simply not there to strike off twice.
+   */
+  async deleteMany(ids: string[]): Promise<number> {
+    const { count } = await prisma.trip.deleteMany({
+      where: { id: { in: ids } },
+    });
+
+    return count;
+  },
 };

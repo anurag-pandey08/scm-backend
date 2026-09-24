@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { loadingSlipController } from "../controllers/loading-slip.controller.ts";
 import { validateBody } from "../middlewares/validate.middleware.ts";
+import { bulkDeleteSchema } from "../schemas/bulk-delete.schema.ts";
 import { loadingSlipSchema } from "../schemas/loading-slip.schema.ts";
 
 /**
@@ -23,6 +24,16 @@ loadingSlipRouter.post(
   "/",
   validateBody(loadingSlipSchema),
   loadingSlipController.create,
+);
+
+// The ticked rows, in one request. A POST because the list is a body and a
+// DELETE that carries one is not reliably carried — see the controller. Its
+// own path rather than a DELETE on "/", so there is no route that empties the
+// book by being called with nothing.
+loadingSlipRouter.post(
+  "/bulk-delete",
+  validateBody(bulkDeleteSchema),
+  loadingSlipController.removeMany,
 );
 
 loadingSlipRouter.get("/:id", loadingSlipController.getById);

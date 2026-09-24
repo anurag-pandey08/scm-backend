@@ -2,6 +2,7 @@ import { Router } from "express";
 import { biltyController } from "../controllers/bilty.controller.ts";
 import { validateBody } from "../middlewares/validate.middleware.ts";
 import { biltySchema } from "../schemas/bilty.schema.ts";
+import { bulkDeleteSchema } from "../schemas/bulk-delete.schema.ts";
 
 /**
  * One firm's L.R. book. Mounted under `/api/companies/:slug/bilties`, with
@@ -20,6 +21,16 @@ biltyRouter.get("/", biltyController.list);
 biltyRouter.get("/next-lr", biltyController.nextLrNo);
 
 biltyRouter.post("/", validateBody(biltySchema), biltyController.create);
+
+// The ticked rows, in one request. A POST because the list is a body and a
+// DELETE that carries one is not reliably carried — see the controller. Its
+// own path rather than a DELETE on "/", so there is no route that empties the
+// book by being called with nothing.
+biltyRouter.post(
+  "/bulk-delete",
+  validateBody(bulkDeleteSchema),
+  biltyController.removeMany,
+);
 
 biltyRouter.get("/:id", biltyController.getById);
 biltyRouter.patch("/:id", validateBody(biltySchema), biltyController.update);

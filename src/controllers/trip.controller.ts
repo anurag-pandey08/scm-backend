@@ -4,6 +4,7 @@ import {
   registerQuerySchema,
   type TripInput,
 } from "../schemas/trip.schema.ts";
+import type { BulkDeleteInput } from "../schemas/bulk-delete.schema.ts";
 import { AppError } from "../utils/app-error.ts";
 import { pathParam } from "../utils/path-param.ts";
 import { z } from "zod";
@@ -65,5 +66,25 @@ export const tripController = {
     // names, and an empty body leaves the client matching the response to the
     // request it sent.
     res.status(200).json({ success: true, data: { id: pathParam(req, "id") } });
+  },
+
+  /**
+   * POST /bulk-delete — every trip the clerk ticked in the daybook.
+   *
+   * A POST rather than a DELETE with a body, for the reason given on the
+   * register's own bulk delete: a DELETE body is allowed but not reliably
+   * carried, and a delete that silently arrives with no list is not a failure
+   * mode worth having.
+   *
+   * Both figures go back, because they can differ — see the service.
+   */
+  async removeMany(req: Request, res: Response): Promise<void> {
+    const { ids } = req.body as BulkDeleteInput;
+
+    const deleted = await tripService.removeMany(ids);
+
+    res
+      .status(200)
+      .json({ success: true, data: { deleted, requested: ids.length } });
   },
 };

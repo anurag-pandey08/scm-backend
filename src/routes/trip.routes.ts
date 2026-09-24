@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { tripController } from "../controllers/trip.controller.ts";
 import { validateBody } from "../middlewares/validate.middleware.ts";
+import { bulkDeleteSchema } from "../schemas/bulk-delete.schema.ts";
 import { tripSchema } from "../schemas/trip.schema.ts";
 
 /**
@@ -20,6 +21,17 @@ export const tripRouter: Router = Router();
 tripRouter.get("/", tripController.list);
 
 tripRouter.post("/", validateBody(tripSchema), tripController.create);
+
+// The ticked rows, in one request. A POST because the list is a body and a
+// DELETE that carries one is not reliably carried — see the controller. Its
+// own path rather than a DELETE on "/", so there is no route that empties the
+// daybook by being called with nothing — which matters more here than in the
+// other three, since this book is both firms'.
+tripRouter.post(
+  "/bulk-delete",
+  validateBody(bulkDeleteSchema),
+  tripController.removeMany,
+);
 
 tripRouter.get("/:id", tripController.getById);
 tripRouter.patch("/:id", validateBody(tripSchema), tripController.update);
