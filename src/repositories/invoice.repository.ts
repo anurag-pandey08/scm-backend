@@ -216,6 +216,27 @@ export const invoiceRepository = {
     return count > 0;
   },
 
+  /**
+   * Strikes out several bills in one statement, charge columns and all — the
+   * cascade the single delete leans on does not care how many rows go.
+   *
+   * The company stays in the `where` for the same reason it is in the single
+   * delete's: the guard and the write are one statement, so a list carrying an
+   * id out of the other firm's book leaves that book alone rather than being
+   * caught by a check that ran a moment earlier.
+   *
+   * What comes back is how many rows Postgres actually removed, which can be
+   * short of what was asked for — a bill the next desk deleted while the clerk
+   * was ticking boxes is simply not there to delete twice.
+   */
+  async deleteMany(companyId: number, ids: string[]): Promise<number> {
+    const { count } = await prisma.invoice.deleteMany({
+      where: { id: { in: ids }, companyId },
+    });
+
+    return count;
+  },
+
   /** Every bill number in a firm's book, for working out the next one. */
   async billNumbers(companyId: number): Promise<string[]> {
     const rows = await prisma.invoice.findMany({

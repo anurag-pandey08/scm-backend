@@ -240,6 +240,30 @@ export const loadingSlipService = {
 
     if (!deleted) throw AppError.notFound("No such slip in this book");
   },
+
+  /**
+   * Strikes out every slip the clerk ticked, and says how many went.
+   *
+   * The count can be short of the list. A book is a page the office is
+   * reading, and a slip deleted at the next desk between the tick and the
+   * confirmation is one that cannot be deleted again — refusing the whole
+   * batch over it would throw away nine good deletions to report one that was
+   * already done. So the ones that are there go, and the caller is told the
+   * figure rather than left to assume it.
+   *
+   * None of them being there is different: that is a request that did nothing,
+   * and it reads as a 404 the same way asking for one missing slip does.
+   */
+  async removeMany(slug: string, ids: string[]): Promise<number> {
+    const company = await companyService.getRow(slug);
+    const deleted = await loadingSlipRepository.deleteMany(company.id, ids);
+
+    if (deleted === 0) {
+      throw AppError.notFound("None of those slips are in this book");
+    }
+
+    return deleted;
+  },
 };
 
 /**
